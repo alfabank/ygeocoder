@@ -1,0 +1,30 @@
+{
+	"name": "YGeoCoder",
+	"version": "0.0.1",
+	"author": "Lev Rogozhin <lev@rogozhin.pro>",
+	"description": "GeoCoder based on Yandex.Maps",
+	"contributors": [
+		{
+			"name": "Lev Rogozhin",
+			"email": "lev@rogozhin.pro"
+		}
+	],
+	"keywords": [
+		"geo",
+		"geocode"
+	],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/alfabank/ygeocoder.git"
+	},
+	"main": "./ygeocoder",
+	"engines": {
+		"node": ">=0.10"
+	},
+	"dependencies": {
+		"@reijii/mydb": ">=0.0.4",
+		"@reijii/adjourn": ">=0.1.3",
+		"sprintf": "0.1.5"
+	}
+}
