@@ -1,6 +1,6 @@
 # YGeoCoder
 
-**Version 0.1.0**
+**Version 0.1.1**
 
 ## Purpose
 A simple to determine geo coordinates by address trouth Yandex.Maps.
@@ -48,8 +48,6 @@ new YGeoCoder({
 	// cache will work only if db object passed
 	// @reijii/mydb object
 	db: db,
-	// cache interval in MySQL INTERVAL format
-	cacheInterval: '6 MONTH',
 	// cache table
 	cacheTable: 'geocoder_cache'
 });

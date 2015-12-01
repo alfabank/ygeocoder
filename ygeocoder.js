@@ -135,10 +135,9 @@ GeoCoder.prototype._getYa = function (callback, address) {
 	});
 };
 GeoCoder.prototype._getCached = function (callback, address) {
-	var sql = sprintf("SELECT lon, lat FROM %s WHERE address = '%s' AND dt + INTERVAL %s > NOW()",
+	var sql = sprintf("SELECT lon, lat FROM %s WHERE address = '%s'",
 		this.config.cacheTable,
-		address,
-		this.config.cacheInterval
+		address
 	);
 	if (!this.db) {
 		callback(null);
@@ -181,7 +180,6 @@ GeoCoder.prototype._cleanAddress = function (address) {
 GeoCoder.prototype._initConfig = function (config) {
 	config = config || {};
 	config.debug = config.debug || false;
-	config.cacheInterval = config.cacheInterval || '6 MONTH';
 	config.cacheTable = config.cacheTable || 'geocoder_cache';
 	config.apiKey = config.apiKey || '';
 	config.sleep = config.sleep || 30 ;
