@@ -123,8 +123,8 @@ GeoCoder.prototype._getYa = function (callback, address) {
 			) {
 				geo = d.response.GeoObjectCollection.featureMember[0].GeoObject.Point.pos.split(' ');
 				callback({
-					lat: geo[0],
-					lon: geo[1],
+					lat: geo[1],
+					lon: geo[0],
 				});
 			} else {
 				callback();

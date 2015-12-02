@@ -1,6 +1,6 @@
 {
 	"name": "YGeoCoder",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"author": "Lev Rogozhin <lev@rogozhin.pro>",
 	"description": "GeoCoder based on Yandex.Maps",
 	"contributors": [

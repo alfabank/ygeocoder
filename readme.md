@@ -1,6 +1,6 @@
 # YGeoCoder
 
-**Version 0.1.1**
+**Version 0.1.2**
 
 ## Purpose
 A simple to determine geo coordinates by address trouth Yandex.Maps.
