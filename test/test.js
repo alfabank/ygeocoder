@@ -1,57 +1,61 @@
-var YGeo = require('../ygeocoder');
-var db = require('@reijii/mydb');
+const YGeo = require('../ygeocoder');
+const db = require('mydb');
 
 db.init({
-	"user": "",
-	"password": "",
-	"socketPath": "/tmp/mysql.sock",
-	"database": "",
-	"connectionLimit": 10
+	user: '',
+	password: '',
+	socketPath: '/tmp/mysql.sock',
+	database: '',
+	connectionLimit: 10
 });
 
-var addr = {
+const addr = {
 	ok: 'Москва, Лубянка, 37',
 	fail: 'Москвабад, Лубянковская, 137'
 };
 
-exports.createCoder = function (test) {
-	var ygc = new YGeo({db: db});
+exports.createCoder = (test) => {
+	const ygc = new YGeo({ db });
 	test.equal(typeof ygc, 'object', 'must be an object');
 	test.done();
 };
 
-exports.decodeAddress = function (test) {
-	var ygc = new YGeo({db: db});
-	var res;
+exports.decodeAddress = (test) => {
+	const ygc = new YGeo({ db });
 
-	test.expect(3);
-	res = ygc.decode(function(data){
-		test.ok(data && data.lat && data.lon, 'uncached error');
-		ygc.decode(function(data){
-			test.ok(data && data.lat && data.lon, 'cache error');
+	test.expect(2);
+	ygc.decode(addr.ok, { noCache: true })
+		.then((data) => {
+			test.ok(data && data.lat && data.lon, 'uncached error');
+
+			ygc.decode(addr.ok)
+				.then((data) => {
+					test.ok(data && data.lat && data.lon, 'cache error');
+					test.done();
+				});
+		});
+};
+
+exports.decodeAddressNoDb = (test) => {
+	const ygc = new YGeo();
+
+	test.expect(1);
+
+	ygc.decode(addr.ok)
+		.then((data) => {
+			test.ok(data && data.lat && data.lon);
 			test.done();
-		}, addr.ok);
-	}, addr.ok, {noCache: true});
-	test.ok(res, 'error while request');
+		});
 };
 
-exports.decodeAddressNoDb = function (test) {
-	var ygc = new YGeo();
+exports.decodeAddressShit = (test) => {
+	const ygc = new YGeo({ db });
 
-	test.expect(1);
-	res = ygc.decode(function(data){
-		test.ok(data && data.lat && data.lon);
-		test.done();
-	}, addr.ok);
-};
-
-exports.decodeAddressShit = function (test) {
-	var ygc = new YGeo({db: db});
-
-	test.expect(1);
-	ygc.decode(function(data){
-		data && data.lat && console.log('addr: %s, lat: %s, lon: %s', addr.fail, data.lat, data.lon);
-		test.ok(!(data && data.lat && data.lon));
-		test.done();
-	}, addr.fail);
+	ygc.decode(addr.fail)
+		.then(() => {
+			test.fail();
+		})
+		.catch(() => {
+			test.done();
+		});
 };

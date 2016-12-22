@@ -1,190 +1,119 @@
-var df = require('@reijii/adjourn');
-var sprintf = require('sprintf').sprintf;
-var https = require('https');
-var http = require('http');
+const https = require('https');
 
-var GeoCoder = function (config) {
-	this.config = this._initConfig(config);
-	this.db = this.config.db;
-};
-
-GeoCoder.prototype.decode = function (callback, address, params) {
-	var that = this;
-	var w = df();
-
-	params = params || {};
-
-	if (typeof callback != 'function') {
-		throw new TypeError('callback must be a function');
+class GeoCoder {
+	constructor(config = {}) {
+		config.debug = config.debug || false;
+		config.cacheTable = config.cacheTable || 'geocoder_cache';
+		config.apiKey = config.apiKey || '';
+		config.sleep = config.sleep || 30 ;
+		
+		this.config = config;
+		this.db = this.config.db;
 	}
-	if (!address) {
-		return null;
-	}
-	address = this._cleanAddress(address);
 
-	if (!params.noCache) {
-		w.when({
-			code: 'cache',
-			func: this._getCached,
-			arguments: [address],
-			context: this
-		}).then(function(data){
-			if (data.cache && data.cache.lat) {
-				callback({
-					lat: parseFloat(data.cache.lat) || 0,
-					lon: parseFloat(data.cache.lon) || 0
-				});
-			} else {
-				that.decode(callback, address, {
-					sleep: params.sleep,
-					noCache: true,
-					writeCache: !(params.noCache === true)
-				});
-			}
-		});
-	} else {
-		w.wait(function(callback){
-			setTimeout(callback, params.sleep || that.config.sleep);
-		});
-		w.when({
-			func: this._getYa,
-			context: this,
-			arguments: [address],
-			code: 'pos'
-		});
-		w.then(function(data){
-			var ww = df().when(function(c){c();});
-			if (data && data.pos && data.pos.lat) {
-				if (that.db && (!params.noCache || !!params.writeCache)) {
-					ww.when({
-						func: that._writeCache,
-						context: that,
-						arguments: [address, {lat: data.pos.lat, lon: data.pos.lon}]
+	decode(text, params = {}) {
+		if (!text) {
+			return Promise.reject({ error: 'no address' });
+		}
+
+		const address = text
+			.replace(/&(quot|laquo|raquo);|[“”«»]/g, '"')
+			.replace(/\s/g, '+');
+
+		return new Promise((resolve, reject) => {
+			if (this.db && !(params.noCache || params.makeRequest)) {
+				this._getFromCache(address)
+					.then((result) => {
+						if (!result) {
+							this.decode(address, Object.assign({}, params, { makeRequest: true }))
+								.then((result) => {
+									resolve(result);
+								})
+								.catch(err => reject(err));
+						} else {
+							resolve(result);
+						}
 					})
-				}
-				ww.then(function(){
-					callback({
-						lat: parseFloat(data.pos.lat) || 0,
-						lon: parseFloat(data.pos.lon) || 0,
+					.catch(err => reject(err));
+			} else {
+				this._loadData(address, params)
+					.then((result) => {
+						resolve(result);
+					})
+					.catch(err => reject(err));
+			}
+		});
+	}
+
+	_loadData(address, params) {
+		const apiKey = this.config.apiKey ? `&key=${this.config.apiKey}` : '';
+		const url = `/1.x/?format=json&geocode=${address}${apiKey}`.replace(/ /g, '+');
+
+		return new Promise((resolve, reject) => {
+			const req = https.get(
+				{
+					hostname: 'geocode-maps.yandex.ru',
+					path: encodeURI(url),
+					port: 443,
+					headers: {
+						'user-agent': 'alfabank.ru',
+						'accept-language': 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4'
+					}
+				},
+				(res) => {
+					let data = '';
+
+					res.setEncoding('utf8');
+					res.on('data', (chunk) => {
+						data += chunk;
 					});
-				});
-			} else {
-				callback(null);
-			}
-		});
-	}
-	return true;
-}
 
-GeoCoder.prototype._getYa = function (callback, address) {
-	var url;
-	var req;
+					res.on('end', () => {
+						try{
+							const resp = JSON.parse(data.toString('utf8')).response;
+							if (resp.GeoObjectCollection.metaDataProperty.GeocoderResponseMetaData.found > 0) {
+								const geo = resp.GeoObjectCollection.featureMember[0].GeoObject.Point.pos.split(' ');
+								const result = {
+									lat: parseFloat(geo[1]) || 0,
+									lon: parseFloat(geo[0]) || 0
+								};
+								if (this.db && !params.noCache && result.lat && result.lon) {
+									this._saveToCache(address, result);
+								}
+								resolve(result);
+							}
+						} catch (e) {
+							return reject(e);
+						}
+					});
+				}
+			);
 
-	url = sprintf('/1.x/?format=json&geocode=%s%s',
-		address,
-		(this.config.apiKey ? '&key=' + this.config.apiKey : '')
-	).replace(/ /g, '+');
-
-	req = https.get({
-		hostname: 'geocode-maps.yandex.ru',
-		path: encodeURI(url),
-		port: 443,
-		headers: {
-			'user-agent': 'alfabank.ru',
- 			'accept-language': 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4'
-		}
-	}, function (res) {
-		var data = '';
-		res.setEncoding('utf8');
-		res.on('data', function(chunk){
-			data += chunk;
-		});
-		res.on('end', function(){
-			var d = data.toString('utf8');
-			var yGeo;
-			var geo;
-
-			try{
-				d = JSON.parse(d);
-			} catch (e) {
-				callback();
-				return;
-			}
-
-			if (d && d.response.GeoObjectCollection) {
-				yGeo = d.response.GeoObjectCollection;
-				//console.log(yGeo);
-			}
-			if (
-				yGeo
-				&& yGeo.metaDataProperty
-				&& yGeo.metaDataProperty.GeocoderResponseMetaData
-				&& yGeo.metaDataProperty.GeocoderResponseMetaData.found > 0
-			) {
-				geo = d.response.GeoObjectCollection.featureMember[0].GeoObject.Point.pos.split(' ');
-				callback({
-					lat: geo[1],
-					lon: geo[0],
-				});
-			} else {
-				callback();
-			}
-		});
-	}).on('error', function(e) {
-		throw e;
-	});
-};
-GeoCoder.prototype._getCached = function (callback, address) {
-	var sql = sprintf("SELECT lon, lat FROM %s WHERE address = '%s'",
-		this.config.cacheTable,
-		address
-	);
-	if (!this.db) {
-		callback(null);
-		return;
-	};
-	this.db.query(sql, function(error, rows){
-		if (error) throw error;
-		if (rows && rows.length) {
-			callback({
-				lat: rows[0].lat,
-				lon: rows[0].lon
+			req.on('error', (e) => {
+				reject(e);
 			});
-		} else {
-			callback(null);
-		}
-	});
-};
-GeoCoder.prototype._writeCache = function (callback, address, geo) {
-	if (!this.db) {
-		callback();
-		return;
-	}
-	this.db.query(
-		sprintf("REPLACE INTO %s (dt, address, lat, lon) VALUES (NOW(), '%s', '%s', '%s')",
-			this.config.cacheTable,
-			address,
-			geo.lat,
-			geo.lon
-		), function(error){
-			if (error) throw error;
-			callback();
-		}
-	);
-}
-GeoCoder.prototype._cleanAddress = function (address) {
-	return address
-		.replace(/&(quot|laquo|raquo);|[“”«»]/g, '"')
-		.replace(/\s/g, '+');
-};
-GeoCoder.prototype._initConfig = function (config) {
-	config = config || {};
-	config.debug = config.debug || false;
-	config.cacheTable = config.cacheTable || 'geocoder_cache';
-	config.apiKey = config.apiKey || '';
-	config.sleep = config.sleep || 30 ;
 
-	return config;
-};
+			req.end();
+		});
+	}
+
+	_getFromCache(address) {
+		return this.db.query(`SELECT lon, lat FROM ${this.config.cacheTable} WHERE address = '${address}'`)
+			.then(({rows: result}) => {
+				if (!result || !result[0]) {
+					return Promise.resolve();
+				} else {
+					Promise.resolve({
+						lat: parseFloat(result[0].lat) || 0,
+						lon: parseFloat(result[0].lon) || 0
+					});
+				}
+			});
+	}
+
+	_saveToCache(address, geo) {
+		this.db.query(`REPLACE INTO ${this.config.cacheTable} (dt, address, lat, lon) VALUES (NOW(), '${address}', '${geo.lat}', '${geo.lon}')`);
+	}
+}
 
 module.exports = GeoCoder;
